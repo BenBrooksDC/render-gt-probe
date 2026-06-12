@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from flask import Flask, jsonify, request
 
@@ -57,6 +57,75 @@ def status():
         "outbound_ip": _outbound_ip(),
         "ts": _now_iso(),
     })
+
+
+@app.get("/fetch_park")
+def fetch_park():
+    """Production fetcher: given park_name + optional dates list, run the
+    full per-park multi-keyword GT fetch + z-score computation and return
+    the dict that fetch_google_trends_for_park would produce locally.
+
+    Query params:
+      park (str)   — required; must match PARK_TREND_QUERIES key
+      dates (str)  — comma-separated YYYY-MM-DD list. Default: last 90 days.
+
+    Returns: {date_str: {gt_intent_z, gt_logistics_z, gt_hotel_z,
+                          gt_composite_z, gt_intent_slope, gt_logistics_spike,
+                          gt_hotel_slope}}
+    """
+    park = request.args.get("park")
+    if not park:
+        return jsonify({"ok": False, "error": "missing ?park= query param"}), 400
+
+    dates_raw = request.args.get("dates", "")
+    if dates_raw:
+        dates = [d.strip() for d in dates_raw.split(",") if d.strip()]
+    else:
+        # Default: last 90 days
+        today = datetime.now(timezone.utc).date()
+        dates = [(today - timedelta(days=i)).isoformat()
+                 for i in range(90, -1, -1)]
+
+    started = time.time()
+    ip = _outbound_ip()
+    try:
+        from google_trends import fetch_google_trends_for_park
+        result = fetch_google_trends_for_park(
+            park, dates, force_refresh=True, cache_only=False,
+        )
+        if not result:
+            return jsonify({
+                "ok": False,
+                "park": park,
+                "outbound_ip": ip,
+                "n_dates": len(dates),
+                "elapsed_s": round(time.time() - started, 2),
+                "error": "empty result (park not in PARK_TREND_QUERIES, "
+                         "or all keywords 429ed)",
+            }), 502
+        nonzero = sum(
+            1 for v in result.values()
+            if isinstance(v, dict) and abs(v.get("gt_intent_z", 0)) > 0.001
+        )
+        return jsonify({
+            "ok": True,
+            "park": park,
+            "outbound_ip": ip,
+            "n_dates": len(dates),
+            "n_dates_with_data": nonzero,
+            "elapsed_s": round(time.time() - started, 2),
+            "data": result,
+        })
+    except Exception as e:
+        msg = str(e)[:300]
+        code = 429 if "429" in msg or "Too Many" in msg else 502
+        return jsonify({
+            "ok": False,
+            "park": park,
+            "outbound_ip": ip,
+            "elapsed_s": round(time.time() - started, 2),
+            "error": f"{type(e).__name__}: {msg}",
+        }), code
 
 
 @app.get("/probe")
