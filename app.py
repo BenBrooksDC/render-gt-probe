@@ -67,33 +67,51 @@ def fred_gas():
 
     Returns: {ok, n_weeks, latest_date, latest_value, data: {date: value}}
     """
-    import csv as _csv
     import io as _io
     import urllib.request as _ur
     started = time.time()
     ip = _outbound_ip()
-    url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GASREGW"
+    # FRED's .csv endpoint is currently broken (timeouts from multiple
+    # networks). The .xls endpoint works with the same data — parse via
+    # pandas + openpyxl.
+    url = "https://fred.stlouisfed.org/graph/fredgraph.xls?id=GASREGW"
     try:
-        # Use a browser-like UA — bare "render-gt-probe/1.0" may get
-        # filtered by FRED's bot heuristics. Also use a generous timeout
-        # because fred.stlouisfed.org has been intermittently slow.
         req = _ur.Request(url, headers={
             "User-Agent": ("Mozilla/5.0 (X11; Linux x86_64) "
                            "AppleWebKit/537.36 (KHTML, like Gecko) "
                            "Chrome/121.0.0.0 Safari/537.36"),
-            "Accept": "text/csv,*/*;q=0.9",
+            "Accept": ("application/vnd.openxmlformats-officedocument."
+                       "spreadsheetml.sheet,application/vnd.ms-excel,*/*"),
         })
-        with _ur.urlopen(req, timeout=90) as resp:
-            text = resp.read().decode()
-        reader = _csv.DictReader(_io.StringIO(text))
+        with _ur.urlopen(req, timeout=60) as resp:
+            data_bytes = resp.read()
+        import pandas as _pd
+        # The fred xls has a few header rows then DATE | GASREGW columns
+        xdf = _pd.read_excel(_io.BytesIO(data_bytes), header=None)
+        # Find row where first cell == "observation_date" or "DATE"
+        header_row = None
+        for i in range(min(30, len(xdf))):
+            cell = str(xdf.iat[i, 0]).strip().lower()
+            if cell in ("observation_date", "date"):
+                header_row = i
+                break
+        if header_row is None:
+            return jsonify({
+                "ok": False, "outbound_ip": ip,
+                "elapsed_s": round(time.time() - started, 2),
+                "error": "could not locate header row in xls",
+            }), 502
+        data_df = xdf.iloc[header_row + 1:, [0, 1]].dropna()
+        data_df.columns = ["date", "value"]
         result: dict[str, float] = {}
-        for row in reader:
-            v = row.get("GASREGW", ".")
-            if v and v != ".":
-                try:
-                    result[row["DATE"]] = float(v)
-                except ValueError:
-                    pass
+        for _, row in data_df.iterrows():
+            try:
+                date_str = _pd.to_datetime(row["date"]).strftime("%Y-%m-%d")
+                val = float(row["value"])
+                if val > 0:
+                    result[date_str] = val
+            except Exception:
+                continue
         if not result:
             return jsonify({
                 "ok": False,
