@@ -5,7 +5,7 @@ services:
     name: render-gt-probe
     runtime: python
     plan: free
-    region: oregon   # us-west-2; change to "frankfurt" for EU testing
+    region: virginia   # us-east; first region was oregon and got Google CAPTCHA wall
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --timeout 60 --workers 1 --bind 0.0.0.0:$PORT
     envVars:
