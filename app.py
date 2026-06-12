@@ -59,6 +59,60 @@ def status():
     })
 
 
+@app.get("/fred_gas")
+def fred_gas():
+    """Fetch FRED weekly US gas price series (GASREGW) and return as
+    {date_str: float_usd_per_gallon}. VPS proxies through here because
+    Hetzner's network can't reach fred.stlouisfed.org reliably.
+
+    Returns: {ok, n_weeks, latest_date, latest_value, data: {date: value}}
+    """
+    import csv as _csv
+    import io as _io
+    import urllib.request as _ur
+    started = time.time()
+    ip = _outbound_ip()
+    url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GASREGW"
+    try:
+        req = _ur.Request(url, headers={"User-Agent": "render-gt-probe/1.0"})
+        with _ur.urlopen(req, timeout=30) as resp:
+            text = resp.read().decode()
+        reader = _csv.DictReader(_io.StringIO(text))
+        result: dict[str, float] = {}
+        for row in reader:
+            v = row.get("GASREGW", ".")
+            if v and v != ".":
+                try:
+                    result[row["DATE"]] = float(v)
+                except ValueError:
+                    pass
+        if not result:
+            return jsonify({
+                "ok": False,
+                "outbound_ip": ip,
+                "elapsed_s": round(time.time() - started, 2),
+                "error": "FRED returned empty/unparseable data",
+            }), 502
+        latest_date = max(result.keys())
+        return jsonify({
+            "ok": True,
+            "outbound_ip": ip,
+            "n_weeks": len(result),
+            "latest_date": latest_date,
+            "latest_value": result[latest_date],
+            "elapsed_s": round(time.time() - started, 2),
+            "data": result,
+        })
+    except Exception as e:
+        msg = str(e)[:300]
+        return jsonify({
+            "ok": False,
+            "outbound_ip": ip,
+            "elapsed_s": round(time.time() - started, 2),
+            "error": f"{type(e).__name__}: {msg}",
+        }), 502
+
+
 @app.get("/fetch_park")
 def fetch_park():
     """Production fetcher: given park_name + optional dates list, run the
