@@ -1,0 +1,14 @@
+# Render blueprint — deploy as a free web service.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: render-gt-probe
+    runtime: python
+    plan: free
+    region: oregon   # us-west-2; change to "frankfurt" for EU testing
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --timeout 60 --workers 1 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    autoDeploy: true
