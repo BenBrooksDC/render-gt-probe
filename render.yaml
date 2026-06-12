@@ -7,7 +7,7 @@ services:
     plan: free
     region: virginia   # us-east; first region was oregon and got Google CAPTCHA wall
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --timeout 60 --workers 1 --bind 0.0.0.0:$PORT
+    startCommand: gunicorn app:app --timeout 240 --workers 1 --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
