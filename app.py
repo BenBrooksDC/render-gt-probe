@@ -74,8 +74,16 @@ def fred_gas():
     ip = _outbound_ip()
     url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=GASREGW"
     try:
-        req = _ur.Request(url, headers={"User-Agent": "render-gt-probe/1.0"})
-        with _ur.urlopen(req, timeout=30) as resp:
+        # Use a browser-like UA — bare "render-gt-probe/1.0" may get
+        # filtered by FRED's bot heuristics. Also use a generous timeout
+        # because fred.stlouisfed.org has been intermittently slow.
+        req = _ur.Request(url, headers={
+            "User-Agent": ("Mozilla/5.0 (X11; Linux x86_64) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/121.0.0.0 Safari/537.36"),
+            "Accept": "text/csv,*/*;q=0.9",
+        })
+        with _ur.urlopen(req, timeout=90) as resp:
             text = resp.read().decode()
         reader = _csv.DictReader(_io.StringIO(text))
         result: dict[str, float] = {}
