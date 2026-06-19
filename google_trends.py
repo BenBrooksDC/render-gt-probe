@@ -335,6 +335,24 @@ PARK_TREND_QUERIES: dict[str, dict[str, list[str]]] = {
         "logistics": ["Holiday World hours"],
         "hotel":    ["hotels near Holiday World Indiana"],
     },
+    # Added 2026-06-19 — previously in KNOWN_NO_GT. Keep render-side and
+    # VPS-side PARK_TREND_QUERIES in sync; the Render service fetches GT
+    # on behalf of the VPS, so both files must list the same parks.
+    "La Ronde": {
+        "intent": ["La Ronde Montreal tickets", "La Ronde billets"],
+        "logistics": ["La Ronde hours", "La Ronde Montreal"],
+        "hotel":    ["Montreal hotel"],
+    },
+    "Sesame Place": {
+        "intent": ["Sesame Place tickets", "Sesame Place Philadelphia"],
+        "logistics": ["Sesame Place hours"],
+        "hotel":    ["hotels near Sesame Place"],
+    },
+    "Six Flags Great Escape": {
+        "intent": ["Six Flags Great Escape tickets", "Great Escape Lake George"],
+        "logistics": ["Six Flags Great Escape hours"],
+        "hotel":    ["Great Escape Lodge"],
+    },
 }
 
 
